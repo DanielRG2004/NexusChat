@@ -13,7 +13,7 @@ const pool = require('./config/database');
 // =========================
 // RUTAS DEL COMPA
 // =========================
-const authRoutesOld = require('./routes/authRoutes');
+const authRoutes = require('./routes/authRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const contactRoutes = require('./routes/contactRoutes');
@@ -23,7 +23,6 @@ const contactRoutes = require('./routes/contactRoutes');
 // =========================
 const groupRoutes = require('./routes/group.routes');
 const uploadRoutes = require('./routes/upload.routes');
-const authRoutesNew = require('./routes/authRoutes');
 
 // =========================
 // MIDDLEWARES
@@ -34,23 +33,29 @@ const app = express();
 const server = http.createServer(app);
 
 // =========================
+// CONFIG
+// =========================
+const PORT = process.env.PORT || 10000;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
+
+// =========================
 // SOCKET.IO
 // =========================
 const io = socketIO(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: CORS_ORIGIN,
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
 // =========================
-// SEGURIDAD Y CONFIG
+// SEGURIDAD
 // =========================
 app.use(helmet());
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  origin: CORS_ORIGIN,
   credentials: true
 }));
 
@@ -68,7 +73,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/', (req, res) => {
   res.json({
     name: 'NexusChat API',
-    version: '2.0',
     status: 'online'
   });
 });
@@ -76,7 +80,6 @@ app.get('/', (req, res) => {
 app.get('/api', (req, res) => {
   res.json({
     endpoints: [
-      // NUEVAS
       'POST /api/auth/request-code',
       'POST /api/auth/verify-code',
       'POST /api/auth/complete-registration',
@@ -87,7 +90,6 @@ app.get('/api', (req, res) => {
 
       'POST /api/upload/group-image',
 
-      // VIEJAS (compa)
       'GET /api/chats',
       'GET /api/messages/:id',
       'GET /api/contacts'
@@ -100,17 +102,13 @@ app.get('/health', (req, res) => {
 });
 
 // =========================
-// RUTAS DEL COMPA
+// RUTAS
 // =========================
-app.use('/api/auth-old', authRoutesOld); // opcional
+app.use('/api/auth', authRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/contacts', contactRoutes);
 
-// =========================
-// TUS RUTAS
-// =========================
-app.use('/api/auth', authRoutesNew);
 app.use('/api/groups', groupRoutes);
 app.use('/api/upload', uploadRoutes);
 
@@ -139,15 +137,11 @@ socketHandler(io, pool);
 })();
 
 // =========================
-// START SERVER
+// START SERVER (IMPORTANTE PARA RENDER)
 // =========================
-const PORT = process.env.PORT || 5000;
-
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✅ Server running on port ${PORT}`);
-  console.log(`📍 API: http://localhost:${PORT}/api`);
-  console.log(`🔌 Socket: ws://localhost:${PORT}`);
-  console.log(`📂 Uploads: http://localhost:${PORT}/uploads\n`);
+  console.log(`🌐 CORS origin: ${CORS_ORIGIN}`);
 });
 
 // =========================
