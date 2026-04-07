@@ -1,20 +1,41 @@
 const jwt = require('jsonwebtoken');
 
-module.exports = (req, res, next) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
-  
-  if (!token) {
-    console.log('❌ No token provided');
-    return res.status(401).json({ error: 'No token, authorization denied' });
-  }
-  
+const JWT_SECRET = process.env.JWT_SECRET || 'nexuschat_secret_key_2024';
+
+function authMiddleware(req, res, next) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'nexuschat_secret_key_2024');
-    req.user = decoded;
-    console.log('✅ User authenticated:', req.user.id, req.user.nombre);
+    const authHeader = req.header('Authorization') || '';
+    const tokenFromBearer = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
+
+    const token = tokenFromBearer || req.header('x-token');
+
+    if (!token) {
+      return res.status(401).json({
+        ok: false,
+        message: 'Token requerido'
+      });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    req.user = {
+      id: decoded.id || decoded.sub,
+      sub: decoded.sub || decoded.id,
+      telefono: decoded.telefono || null,
+      nombre: decoded.nombre || null,
+      isAdmin: decoded.isAdmin || false
+    };
+
     next();
-  } catch (error) {
-    console.error('❌ Token verification failed:', error.message);
-    res.status(401).json({ error: 'Token is not valid' });
+  } catch {
+    return res.status(401).json({
+      ok: false,
+      message: 'Token invalido o expirado'
+    });
   }
-};
+}
+
+module.exports = authMiddleware;
+module.exports.requireAuth = authMiddleware;
