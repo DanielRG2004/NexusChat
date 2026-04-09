@@ -24,6 +24,9 @@ const contactRoutes = require('./routes/contactRoutes');
 const groupRoutes = require('./routes/group.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const authRoutesNew = require('./routes/authRoutes');
+const emailAuthRoutes = require('./routes/emailAuth.routes');
+
+app.use('/api/auth', emailAuthRoutes);
 
 // =========================
 // MIDDLEWARES
