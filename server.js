@@ -23,12 +23,12 @@ const contactRoutes = require('./routes/contactRoutes');
 // =========================
 const groupRoutes = require('./routes/group.routes');
 const uploadRoutes = require('./routes/upload.routes');
-const emailAuthRoutes = require('./routes/emailAuth.routes');
 
-// GRUPOS
+// Si ya creaste estas rutas separadas para mensajes de grupo, déjalas activas.
+// Si todavía no existen, comenta estas dos líneas y la línea del app.use más abajo.
+/*
 const groupMessagesRoutes = require('./routes/groupMessages.routes');
-app.use('/api/groups', groupRoutes);
-app.use('/api/groups', groupMessagesRoutes);
+*/
 
 // =========================
 // MIDDLEWARES
@@ -92,16 +92,9 @@ app.get('/api', (req, res) => {
       'POST /api/auth/verify-code',
       'POST /api/auth/complete-registration',
       'POST /api/auth/login',
-
-      'POST /api/auth-email/request-code',
-      'POST /api/auth-email/verify-code',
-      'POST /api/auth-email/complete-registration',
-      'POST /api/auth-email/login',
-
-      'GET /api/groups',
+      'GET /api/groups/mine',
       'POST /api/groups',
       'POST /api/upload/group-image',
-
       'GET /api/chats',
       'GET /api/messages/:id',
       'GET /api/contacts'
@@ -117,13 +110,14 @@ app.get('/health', (req, res) => {
 // RUTAS
 // =========================
 app.use('/api/auth', authRoutes);
-app.use('/api/auth-email', emailAuthRoutes);
-
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/contacts', contactRoutes);
 
 app.use('/api/groups', groupRoutes);
+/*
+app.use('/api/groups', groupMessagesRoutes);
+*/
 app.use('/api/upload', uploadRoutes);
 
 // =========================
