@@ -10,9 +10,7 @@ const {
   updateGroup,
   addMembers,
   updateMember,
-  removeMember,
-  getGroupMessages,
-  sendGroupMessage
+  removeMember
 } = require('../controllers/groups.controller');
 
 router.use(requireAuth);
@@ -25,7 +23,5 @@ router.patch('/:groupId', updateGroup);
 router.post('/:groupId/members', addMembers);
 router.patch('/:groupId/members/:userId', updateMember);
 router.delete('/:groupId/members/:userId', removeMember);
-router.get('/:groupId/messages', getGroupMessages);
-router.post('/:groupId/messages', sendGroupMessage);
 
 module.exports = router;

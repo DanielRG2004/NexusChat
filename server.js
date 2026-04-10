@@ -25,6 +25,11 @@ const groupRoutes = require('./routes/group.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const emailAuthRoutes = require('./routes/emailAuth.routes');
 
+// GRUPOS
+const groupMessagesRoutes = require('./routes/groupMessages.routes');
+app.use('/api/groups', groupRoutes);
+app.use('/api/groups', groupMessagesRoutes);
+
 // =========================
 // MIDDLEWARES
 // =========================

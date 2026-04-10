@@ -14,6 +14,10 @@ function normalizeMemberIds(input, currentUserId) {
   )];
 }
 
+function toBoolFlag(value) {
+  return value === true || value === 1 || value === '1';
+}
+
 async function ensureGroupConversation(conn, groupId) {
   const [existing] = await conn.query(
     'SELECT id FROM conversaciones WHERE tipo = "grupo" AND grupo_id = ? LIMIT 1',
@@ -45,11 +49,6 @@ async function getMembership(conn, groupId, userId) {
   return rows[0] || null;
 }
 
-async function isGroupAdmin(conn, groupId, userId) {
-  const membership = await getMembership(conn, groupId, userId);
-  return membership && membership.rol === 'admin';
-}
-
 async function queryWithRetry(sql, params = [], retries = 1) {
   try {
     return await pool.query(sql, params);
@@ -61,7 +60,6 @@ async function queryWithRetry(sql, params = [], retries = 1) {
     throw error;
   }
 }
-
 
 async function searchUsers(req, res, next) {
   try {
@@ -124,13 +122,20 @@ async function createGroup(req, res, next) {
     }
 
     const memberIds = normalizeMemberIds(miembros, req.user.id);
+    const onlyAdmins = toBoolFlag(solo_admins);
 
     await conn.beginTransaction();
 
     const [groupResult] = await conn.query(
       `INSERT INTO grupos (nombre, descripcion, imagen, creador_id, solo_admins)
        VALUES (?, ?, ?, ?, ?)`,
-      [cleanNombre, String(descripcion || '').trim(), String(imagen || 'group_default.png').trim(), req.user.id, solo_admins ? 1 : 0]
+      [
+        cleanNombre,
+        String(descripcion || '').trim(),
+        String(imagen || 'group_default.png').trim(),
+        req.user.id,
+        onlyAdmins ? 1 : 0
+      ]
     );
 
     const groupId = groupResult.insertId;
@@ -173,7 +178,7 @@ async function createGroup(req, res, next) {
         nombre: cleanNombre,
         descripcion: String(descripcion || '').trim(),
         imagen: String(imagen || 'group_default.png').trim(),
-        solo_admins: solo_admins ? 1 : 0,
+        solo_admins: onlyAdmins ? 1 : 0,
         creador_id: req.user.id
       }
     });
@@ -208,7 +213,7 @@ async function myGroups(req, res, next) {
            WHERE gm2.grupo_id = g.id
          ) AS miembros_count,
          (
-           SELECT m.contenido
+           SELECT COALESCE(m.contenido, m.contenido_cifrado)
            FROM mensajes m
            INNER JOIN conversaciones c2 ON c2.id = m.conversacion_id
            WHERE c2.grupo_id = g.id
@@ -377,7 +382,7 @@ async function updateGroup(req, res, next) {
 
     if (solo_admins !== undefined) {
       fields.push('solo_admins = ?');
-      values.push(solo_admins ? 1 : 0);
+      values.push(toBoolFlag(solo_admins) ? 1 : 0);
     }
 
     if (fields.length === 0) {
@@ -553,7 +558,7 @@ async function updateMember(req, res, next) {
 
     if (silenciado !== undefined) {
       updates.push('silenciado = ?');
-      values.push(silenciado ? 1 : 0);
+      values.push(toBoolFlag(silenciado) ? 1 : 0);
     }
 
     if (updates.length === 0) {
@@ -672,168 +677,6 @@ async function removeMember(req, res, next) {
   }
 }
 
-async function getGroupMessages(req, res, next) {
-  try {
-    const groupId = toInt(req.params.groupId);
-    if (!groupId) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Grupo invalido'
-      });
-    }
-
-    const userId = req.user.id;
-    const page = Math.max(1, toInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, toInt(req.query.limit) || 50));
-    const offset = (page - 1) * limit;
-
-    const [membershipRows] = await pool.query(
-      'SELECT rol, silenciado FROM grupo_miembros WHERE grupo_id = ? AND usuario_id = ? LIMIT 1',
-      [groupId, userId]
-    );
-
-    if (!membershipRows[0]) {
-      return res.status(403).json({
-        ok: false,
-        message: 'No eres miembro de este grupo'
-      });
-    }
-
-    const [rows] = await pool.query(
-      `SELECT
-         m.id,
-         m.conversacion_id,
-         m.emisor_id,
-         u.nombre AS emisor_nombre,
-         u.foto_perfil AS emisor_foto,
-         m.contenido,
-         m.tipo,
-         m.estado,
-         m.eliminado,
-         m.created_at,
-         meg.estado AS mi_estado
-       FROM mensajes m
-       INNER JOIN conversaciones c ON c.id = m.conversacion_id
-       INNER JOIN usuarios u ON u.id = m.emisor_id
-       LEFT JOIN mensajes_estado_grupo meg
-         ON meg.mensaje_id = m.id AND meg.usuario_id = ?
-       WHERE c.grupo_id = ?
-       ORDER BY m.id ASC
-       LIMIT ? OFFSET ?`,
-      [userId, groupId, limit, offset]
-    );
-
-    return res.json({
-      ok: true,
-      messages: rows,
-      page,
-      limit
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function sendGroupMessage(req, res, next) {
-  const conn = await pool.getConnection();
-
-  try {
-    const groupId = toInt(req.params.groupId);
-    const {
-      contenido,
-      tipo = 'texto'
-    } = req.body;
-
-    if (!groupId) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Grupo invalido'
-      });
-    }
-
-    const text = String(contenido || '').trim();
-    if (!text) {
-      return res.status(400).json({
-        ok: false,
-        message: 'El mensaje no puede estar vacio'
-      });
-    }
-
-    await conn.beginTransaction();
-
-    const membership = await getMembership(conn, groupId, req.user.id);
-    if (!membership) {
-      await conn.rollback();
-      return res.status(403).json({
-        ok: false,
-        message: 'No eres miembro de este grupo'
-      });
-    }
-
-    if (membership.solo_admins && membership.rol !== 'admin') {
-      await conn.rollback();
-      return res.status(403).json({
-        ok: false,
-        message: 'Solo los administradores pueden enviar mensajes en este grupo'
-      });
-    }
-
-    const [conversationRows] = await conn.query(
-      'SELECT id FROM conversaciones WHERE tipo = "grupo" AND grupo_id = ? LIMIT 1',
-      [groupId]
-    );
-
-    const conversacionId = conversationRows[0]
-      ? conversationRows[0].id
-      : await ensureGroupConversation(conn, groupId);
-
-    const [messageResult] = await conn.query(
-      `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo, estado)
-       VALUES (?, ?, ?, ?, 'sent')`,
-      [conversacionId, req.user.id, text, tipo]
-    );
-
-    const mensajeId = messageResult.insertId;
-
-    const [members] = await conn.query(
-      'SELECT usuario_id FROM grupo_miembros WHERE grupo_id = ?',
-      [groupId]
-    );
-
-    if (members.length > 0) {
-      const values = members.map((m) => [
-        mensajeId,
-        m.usuario_id,
-        m.usuario_id === req.user.id ? 'read' : 'sent'
-      ]);
-
-      await conn.query(
-        `INSERT INTO mensajes_estado_grupo (mensaje_id, usuario_id, estado)
-         VALUES ?`,
-        [values]
-      );
-    }
-
-    await conn.commit();
-
-    return res.status(201).json({
-      ok: true,
-      message: 'Mensaje enviado correctamente',
-      data: {
-        id: mensajeId,
-        conversacion_id: conversacionId,
-        contenido: text,
-        tipo
-      }
-    });
-  } catch (error) {
-    await conn.rollback();
-    next(error);
-  } finally {
-    conn.release();
-  }
-}
-
 module.exports = {
   searchUsers,
   createGroup,
@@ -842,7 +685,5 @@ module.exports = {
   updateGroup,
   addMembers,
   updateMember,
-  removeMember,
-  getGroupMessages,
-  sendGroupMessage
+  removeMember
 };
