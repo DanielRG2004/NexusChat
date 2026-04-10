@@ -21,14 +21,13 @@ const contactRoutes = require('./routes/contactRoutes');
 // =========================
 // TUS RUTAS
 // =========================
+const emailAuthRoutes = require('./routes/emailAuth.routes');
 const groupRoutes = require('./routes/group.routes');
 const uploadRoutes = require('./routes/upload.routes');
 
-// Si ya creaste estas rutas separadas para mensajes de grupo, déjalas activas.
-// Si todavía no existen, comenta estas dos líneas y la línea del app.use más abajo.
-/*
-const groupMessagesRoutes = require('./routes/groupMessages.routes');
-*/
+// Si ya creaste esta ruta separada para mensajes de grupo, descomenta estas 2 líneas.
+// Si todavía no existe el archivo, déjalo comentado para que no rompa Render.
+// const groupMessagesRoutes = require('./routes/groupMessages.routes');
 
 // =========================
 // MIDDLEWARES
@@ -60,12 +59,10 @@ const io = socketIO(server, {
 // =========================
 app.use(helmet());
 
-app.use(
-  cors({
-    origin: CORS_ORIGIN,
-    credentials: true
-  })
-);
+app.use(cors({
+  origin: CORS_ORIGIN,
+  credentials: true
+}));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -92,9 +89,16 @@ app.get('/api', (req, res) => {
       'POST /api/auth/verify-code',
       'POST /api/auth/complete-registration',
       'POST /api/auth/login',
+
+      'POST /api/auth-email/request-code',
+      'POST /api/auth-email/verify-code',
+      'POST /api/auth-email/complete-registration',
+      'POST /api/auth-email/login',
+
       'GET /api/groups/mine',
       'POST /api/groups',
       'POST /api/upload/group-image',
+
       'GET /api/chats',
       'GET /api/messages/:id',
       'GET /api/contacts'
@@ -110,14 +114,15 @@ app.get('/health', (req, res) => {
 // RUTAS
 // =========================
 app.use('/api/auth', authRoutes);
+app.use('/api/auth-email', emailAuthRoutes);
+
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/contacts', contactRoutes);
 
 app.use('/api/groups', groupRoutes);
-/*
-app.use('/api/groups', groupMessagesRoutes);
-*/
+// app.use('/api/groups', groupMessagesRoutes);
+
 app.use('/api/upload', uploadRoutes);
 
 // =========================
