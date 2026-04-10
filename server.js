@@ -11,7 +11,7 @@ dotenv.config();
 const pool = require('./config/database');
 
 // ==========================
-// RUTAS DEL COMPA
+// RUTAS DEL COMPAÑERO
 // ==========================
 const authRoutes = require('./routes/authRoutes');
 const chatRoutes = require('./routes/chatRoutes');
@@ -23,10 +23,7 @@ const contactRoutes = require('./routes/contactRoutes');
 // =========================
 const groupRoutes = require('./routes/group.routes');
 const uploadRoutes = require('./routes/upload.routes');
-const authRoutesNew = require('./routes/authRoutes');
 const emailAuthRoutes = require('./routes/emailAuth.routes');
-
-app.use('/api/auth', emailAuthRoutes);
 
 // =========================
 // MIDDLEWARES
@@ -48,7 +45,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 const io = socketIO(server, {
   cors: {
     origin: CORS_ORIGIN,
-    methods: ["GET", "POST"],
+    methods: ['GET', 'POST'],
     credentials: true
   }
 });
@@ -58,10 +55,12 @@ const io = socketIO(server, {
 // =========================
 app.use(helmet());
 
-app.use(cors({
-  origin: CORS_ORIGIN,
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: CORS_ORIGIN,
+    credentials: true
+  })
+);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -89,9 +88,13 @@ app.get('/api', (req, res) => {
       'POST /api/auth/complete-registration',
       'POST /api/auth/login',
 
+      'POST /api/auth-email/request-code',
+      'POST /api/auth-email/verify-code',
+      'POST /api/auth-email/complete-registration',
+      'POST /api/auth-email/login',
+
       'GET /api/groups',
       'POST /api/groups',
-
       'POST /api/upload/group-image',
 
       'GET /api/chats',
@@ -109,6 +112,8 @@ app.get('/health', (req, res) => {
 // RUTAS
 // =========================
 app.use('/api/auth', authRoutes);
+app.use('/api/auth-email', emailAuthRoutes);
+
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/contacts', contactRoutes);
@@ -141,7 +146,7 @@ socketHandler(io, pool);
 })();
 
 // =========================
-// START SERVER (IMPORTANTE PARA RENDER)
+// START SERVER
 // =========================
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✅ Server running on port ${PORT}`);
