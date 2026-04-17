@@ -27,7 +27,7 @@ const uploadRoutes = require('./routes/upload.routes');
 
 // Si ya creaste esta ruta separada para mensajes de grupo, descomenta estas 2 líneas.
 // Si todavía no existe el archivo, déjalo comentado para que no rompa Render.
-// const groupMessagesRoutes = require('./routes/groupMessages.routes');
+const groupMessagesRoutes = require('./routes/groupMessages.routes');
 
 // =========================
 // MIDDLEWARES
@@ -121,7 +121,8 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/contacts', contactRoutes);
 
 app.use('/api/groups', groupRoutes);
-// app.use('/api/groups', groupMessagesRoutes);
+
+app.use('/api/groups', groupMessagesRoutes);
 
 app.use('/api/upload', uploadRoutes);
 
