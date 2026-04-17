@@ -1,6 +1,6 @@
 const pool = require('../config/database');
 
-// Get all conversations (sin contador de no leídos)
+// Get all conversations (versión corregida)
 exports.getConversations = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -27,29 +27,20 @@ exports.getConversations = async (req, res) => {
           WHEN c.usuario1_id = ? THEN u2.foto_perfil
           ELSE u1.foto_perfil
         END as other_user_avatar,
-        CASE 
-          WHEN c.usuario1_id = ? THEN c2.apodo
-          ELSE c3.apodo
-        END as other_user_apodo,
+        COALESCE(
+          CASE WHEN c.usuario1_id = ? THEN c2.apodo ELSE c3.apodo END,
+          CASE WHEN c.usuario1_id = ? THEN u2.nombre ELSE u1.nombre END
+        ) as other_user_apodo,
         'private' as type,
         (SELECT contenido FROM mensajes 
          WHERE conversacion_id = c.id 
          AND eliminado = 0
-         AND NOT EXISTS (
-           SELECT 1 FROM mensajes_ocultos_usuario mou 
-           WHERE mou.mensaje_id = mensajes.id AND mou.usuario_id = ?
-         )
          ORDER BY created_at DESC LIMIT 1) as last_message,
         (SELECT created_at FROM mensajes 
          WHERE conversacion_id = c.id 
          AND eliminado = 0
-         AND NOT EXISTS (
-           SELECT 1 FROM mensajes_ocultos_usuario mou 
-           WHERE mou.mensaje_id = mensajes.id AND mou.usuario_id = ?
-         )
          ORDER BY created_at DESC LIMIT 1) as last_message_time,
         CASE WHEN c2.id IS NOT NULL OR c3.id IS NOT NULL THEN true ELSE false END as is_contact,
-        -- ARCHIVADO Y FIJADO correctos para el usuario actual
         COALESCE(
           CASE WHEN c.usuario1_id = ? THEN c2.archivado ELSE c3.archivado END,
           0
@@ -59,8 +50,8 @@ exports.getConversations = async (req, res) => {
           0
         ) as fijado
       FROM conversaciones c
-      LEFT JOIN usuarios u1 ON c.usuario1_id = u1.id
-      LEFT JOIN usuarios u2 ON c.usuario2_id = u2.id
+      JOIN usuarios u1 ON c.usuario1_id = u1.id
+      JOIN usuarios u2 ON c.usuario2_id = u2.id
       LEFT JOIN contactos c2 ON c2.contacto_id = u2.id AND c2.usuario_id = ?
       LEFT JOIN contactos c3 ON c3.contacto_id = u1.id AND c3.usuario_id = ?
       WHERE c.tipo = 'privada'
@@ -69,22 +60,21 @@ exports.getConversations = async (req, res) => {
           CASE WHEN c.usuario1_id = ? THEN c2.archivado ELSE c3.archivado END,
           0
         ) = 0
-      ORDER BY COALESCE(
+      ORDER BY 
+        COALESCE(
           CASE WHEN c.usuario1_id = ? THEN c2.fijado ELSE c3.fijado END,
           0
-        ) DESC, last_message_time DESC, c.created_at DESC`,
+        ) DESC,
+        last_message_time DESC,
+        c.created_at DESC`,
       [
-        userId, userId, userId, userId, userId,
-        userId, // para mensajes ocultos (last_message)
-        userId, // para mensajes ocultos (last_message_time)
-        userId, // para archivado (cuando es usuario1)
-        userId, // para fijado (cuando es usuario1)
-        userId, // para c2.usuario_id
-        userId, // para c3.usuario_id
-        userId, // para WHERE (c.usuario1_id = ?)
-        userId, // para WHERE (c.usuario2_id = ?)
-        userId, // para WHERE archivado
-        userId  // para ORDER BY fijado
+        userId, userId, userId, userId, // para CASE other_user_*
+        userId, userId,                 // para COALESCE apodo
+        userId, userId,                 // para archivado/fijado
+        userId, userId,                 // para c2.usuario_id y c3.usuario_id
+        userId, userId,                 // para WHERE usuario1_id/usuario2_id
+        userId,                         // para WHERE archivado = 0
+        userId                          // para ORDER BY fijado
       ]
     );
     
