@@ -9,8 +9,8 @@ function normalizeMemberIds(input, currentUserId) {
   const ids = Array.isArray(input) ? input : [];
   return [...new Set(
     ids
-      .map(toInt)
-      .filter((id) => id && id !== currentUserId)
+      .map(id => toInt(id))
+      .filter(id => id && id !== currentUserId)
   )];
 }
 
@@ -23,16 +23,12 @@ async function ensureGroupConversation(conn, groupId) {
     'SELECT id FROM conversaciones WHERE tipo = "grupo" AND grupo_id = ? LIMIT 1',
     [groupId]
   );
-
-  if (existing[0]) {
-    return existing[0].id;
-  }
+  if (existing[0]) return existing[0].id;
 
   const [result] = await conn.query(
     'INSERT INTO conversaciones (tipo, grupo_id) VALUES ("grupo", ?)',
     [groupId]
   );
-
   return result.insertId;
 }
 
@@ -45,57 +41,34 @@ async function getMembership(conn, groupId, userId) {
      LIMIT 1`,
     [groupId, userId]
   );
-
   return rows[0] || null;
-}
-
-async function queryWithRetry(sql, params = [], retries = 1) {
-  try {
-    return await pool.query(sql, params);
-  } catch (error) {
-    if (error.code === 'ECONNRESET' && retries > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      return queryWithRetry(sql, params, retries - 1);
-    }
-    throw error;
-  }
 }
 
 async function searchUsers(req, res, next) {
   try {
     const q = String(req.query.q || '').trim();
     const currentUserId = req.user.id;
-
-    if (!q) {
-      return res.json({ ok: true, users: [] });
-    }
+    if (!q) return res.json({ ok: true, users: [] });
 
     const like = `%${q}%`;
     const digits = q.replace(/\D/g, '');
     const phoneLike = digits ? `%${digits}%` : like;
 
-    const [rows] = await queryWithRetry(
-      `SELECT id, nombre, telefono, foto_perfil, descripcion, estado_cuenta
-       FROM usuarios
-       WHERE id <> ?
+    // Solo buscar entre contactos del usuario actual
+    const [rows] = await pool.query(
+      `SELECT u.id, u.nombre, u.telefono, u.foto_perfil, u.descripcion, u.estado_cuenta
+       FROM usuarios u
+       INNER JOIN contactos c ON c.contacto_id = u.id
+       WHERE c.usuario_id = ?
+         AND u.id <> ?
          AND (
-           nombre LIKE ?
-           OR email LIKE ?
-           OR telefono LIKE ?
-           OR REPLACE(telefono, '+', '') LIKE ?
+           u.nombre LIKE ? OR u.email LIKE ? OR u.telefono LIKE ? OR REPLACE(u.telefono, '+', '') LIKE ?
          )
-       ORDER BY nombre ASC
+       ORDER BY u.nombre ASC
        LIMIT 20`,
-      [
-        currentUserId,
-        like,
-        like,
-        phoneLike,
-        phoneLike
-      ]
+      [currentUserId, currentUserId, like, like, phoneLike, phoneLike]
     );
-
-    return res.json({ ok: true, users: rows });
+    res.json({ ok: true, users: rows });
   } catch (error) {
     next(error);
   }
@@ -103,7 +76,6 @@ async function searchUsers(req, res, next) {
 
 async function createGroup(req, res, next) {
   const conn = await pool.getConnection();
-
   try {
     const {
       nombre,
@@ -115,61 +87,56 @@ async function createGroup(req, res, next) {
 
     const cleanNombre = String(nombre || '').trim();
     if (cleanNombre.length < 3) {
-      return res.status(400).json({
-        ok: false,
-        message: 'El nombre del grupo debe tener al menos 3 caracteres'
-      });
+      return res.status(400).json({ ok: false, message: 'El nombre del grupo debe tener al menos 3 caracteres' });
     }
 
+    console.log('📦 Creando grupo:', { nombre: cleanNombre, miembrosRecibidos: miembros });
     const memberIds = normalizeMemberIds(miembros, req.user.id);
-    const onlyAdmins = toBoolFlag(solo_admins);
+    console.log('👥 Miembros normalizados:', memberIds);
 
+    const onlyAdmins = toBoolFlag(solo_admins);
     await conn.beginTransaction();
 
+    // Insertar grupo
     const [groupResult] = await conn.query(
       `INSERT INTO grupos (nombre, descripcion, imagen, creador_id, solo_admins)
        VALUES (?, ?, ?, ?, ?)`,
-      [
-        cleanNombre,
-        String(descripcion || '').trim(),
-        String(imagen || 'group_default.png').trim(),
-        req.user.id,
-        onlyAdmins ? 1 : 0
-      ]
+      [cleanNombre, String(descripcion || '').trim(), String(imagen || 'group_default.png').trim(), req.user.id, onlyAdmins ? 1 : 0]
     );
-
     const groupId = groupResult.insertId;
+    console.log('✅ Grupo insertado, ID:', groupId);
 
+    // Insertar creador como admin
     await conn.query(
       `INSERT INTO grupo_miembros (grupo_id, usuario_id, rol, silenciado)
        VALUES (?, ?, 'admin', 0)`,
       [groupId, req.user.id]
     );
+    console.log('✅ Creador agregado como miembro admin');
 
+    // Insertar otros miembros
     if (memberIds.length > 0) {
       const placeholders = memberIds.map(() => '?').join(',');
       const [existingUsers] = await conn.query(
         `SELECT id FROM usuarios WHERE id IN (${placeholders})`,
         memberIds
       );
-
-      const validIds = existingUsers.map((u) => u.id);
+      const validIds = existingUsers.map(u => u.id);
       if (validIds.length > 0) {
-        const values = validIds.map((id) => [groupId, id, 'miembro', 0]);
-
+        const values = validIds.map(id => [groupId, id, 'miembro', 0]);
         await conn.query(
-          `INSERT IGNORE INTO grupo_miembros (grupo_id, usuario_id, rol, silenciado)
-           VALUES ?`,
+          `INSERT IGNORE INTO grupo_miembros (grupo_id, usuario_id, rol, silenciado) VALUES ?`,
           [values]
         );
+        console.log(`✅ ${validIds.length} miembros adicionales insertados`);
       }
     }
 
     const conversacionId = await ensureGroupConversation(conn, groupId);
-
     await conn.commit();
+    console.log('🎉 Grupo creado exitosamente');
 
-    return res.status(201).json({
+    res.status(201).json({
       ok: true,
       message: 'Grupo creado correctamente',
       group: {
@@ -184,6 +151,7 @@ async function createGroup(req, res, next) {
     });
   } catch (error) {
     await conn.rollback();
+    console.error('❌ Error en createGroup:', error);
     next(error);
   } finally {
     conn.release();
