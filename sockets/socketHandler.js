@@ -58,7 +58,13 @@ module.exports = (io, pool) => {
           [msg.id, userId]
         );
         io.emit('refresh_messages', { conversationId: msg.conversacion_id });
-        // Notificar al emisor (opcional, en grupos no se suele notificar a cada emisor individualmente)
+        const senderSocket = users.get(msg.emisor_id);
+        if (senderSocket) {
+          io.to(senderSocket).emit('message_status_updated', {
+            messageId: msg.id,
+            estado: 'delivered'
+          });
+        }
       }
     });
 
@@ -162,7 +168,7 @@ module.exports = (io, pool) => {
           io.emit('refresh_messages', { conversationId });
           io.emit('refresh_chats');
 
-          // Notificar a los emisores (opcional)
+          // Notificar a los emisores que sus mensajes fueron leídos
           const [senders] = await pool.execute(
             `SELECT DISTINCT emisor_id 
              FROM mensajes 
@@ -172,9 +178,9 @@ module.exports = (io, pool) => {
           for (const sender of senders) {
             const senderSocket = users.get(sender.emisor_id);
             if (senderSocket) {
-              io.to(senderSocket).emit('group_message_read', {
+              io.to(senderSocket).emit('message_status_updated', {
                 messageIds,
-                userId,
+                estado: 'read',
                 conversationId
               });
             }
