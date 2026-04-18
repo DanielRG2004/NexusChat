@@ -6,131 +6,138 @@ exports.getConversations = async (req, res) => {
     const userId = req.user.id;
     console.log('📥 Fetching conversations for user:', userId);
 
-    // Consulta unificada: chats privados + grupos (solo los que pertenece el usuario)
-    const sql = `
-      SELECT * FROM (
-        -- Chats privados
-        SELECT 
-          c.id,
-          c.tipo,
-          c.created_at,
-          CASE 
-            WHEN c.usuario1_id = ? THEN u2.id
-            ELSE u1.id
-          END as other_user_id,
-          CASE 
-            WHEN c.usuario1_id = ? THEN u2.nombre
-            ELSE u1.nombre
-          END as other_user_name,
-          CASE 
-            WHEN c.usuario1_id = ? THEN u2.telefono
-            ELSE u1.telefono
-          END as other_user_phone,
-          CASE 
-            WHEN c.usuario1_id = ? THEN u2.foto_perfil
-            ELSE u1.foto_perfil
-          END as other_user_avatar,
-          COALESCE(
-            CASE WHEN c.usuario1_id = ? THEN c2.apodo ELSE c3.apodo END,
-            CASE WHEN c.usuario1_id = ? THEN u2.nombre ELSE u1.nombre END
-          ) as other_user_apodo,
-          'private' as type,
-          (SELECT contenido FROM mensajes 
-           WHERE conversacion_id = c.id 
-           AND eliminado = 0
-           ORDER BY created_at DESC LIMIT 1) as last_message,
-          (SELECT created_at FROM mensajes 
-           WHERE conversacion_id = c.id 
-           AND eliminado = 0
-           ORDER BY created_at DESC LIMIT 1) as last_message_time,
-          CASE WHEN c2.id IS NOT NULL OR c3.id IS NOT NULL THEN true ELSE false END as is_contact,
-          COALESCE(
-            CASE WHEN c.usuario1_id = ? THEN c2.archivado ELSE c3.archivado END,
-            0
-          ) as archivado,
-          COALESCE(
-            CASE WHEN c.usuario1_id = ? THEN c2.fijado ELSE c3.fijado END,
-            0
-          ) as fijado,
-          NULL as group_id,
-          NULL as group_name,
-          NULL as group_avatar,
-          NULL as member_count
-        FROM conversaciones c
-        JOIN usuarios u1 ON c.usuario1_id = u1.id
-        JOIN usuarios u2 ON c.usuario2_id = u2.id
-        LEFT JOIN contactos c2 ON c2.contacto_id = u2.id AND c2.usuario_id = ?
-        LEFT JOIN contactos c3 ON c3.contacto_id = u1.id AND c3.usuario_id = ?
-        WHERE c.tipo = 'privada'
-          AND (c.usuario1_id = ? OR c.usuario2_id = ?)
-          AND COALESCE(
-            CASE WHEN c.usuario1_id = ? THEN c2.archivado ELSE c3.archivado END,
-            0
-          ) = 0
-
-        UNION ALL
-
-        -- Grupos (solo donde el usuario es miembro)
-        SELECT 
-          c.id,
-          'grupo' as tipo,
-          c.created_at,
-          NULL as other_user_id,
-          NULL as other_user_name,
-          NULL as other_user_phone,
-          NULL as other_user_avatar,
-          NULL as other_user_apodo,
-          'group' as type,
-          (SELECT contenido FROM mensajes 
-           WHERE conversacion_id = c.id 
-           AND eliminado = 0
-           ORDER BY created_at DESC LIMIT 1) as last_message,
-          (SELECT created_at FROM mensajes 
-           WHERE conversacion_id = c.id 
-           AND eliminado = 0
-           ORDER BY created_at DESC LIMIT 1) as last_message_time,
-          false as is_contact,
-          0 as archivado,
-          0 as fijado,
-          g.id as group_id,
-          g.nombre as group_name,
-          g.imagen as group_avatar,
-          (SELECT COUNT(*) FROM grupo_miembros WHERE grupo_id = g.id) as member_count
-        FROM conversaciones c
-        JOIN grupos g ON c.grupo_id = g.id
-        JOIN grupo_miembros gm ON gm.grupo_id = g.id AND gm.usuario_id = ?
-        WHERE c.tipo = 'grupo'
-      ) AS combined
+    // --- 1. Consulta para conversaciones privadas ---
+    const privateSql = `
+      SELECT 
+        c.id,
+        c.tipo,
+        c.created_at,
+        CASE 
+          WHEN c.usuario1_id = ? THEN u2.id
+          ELSE u1.id
+        END as other_user_id,
+        CASE 
+          WHEN c.usuario1_id = ? THEN u2.nombre
+          ELSE u1.nombre
+        END as other_user_name,
+        CASE 
+          WHEN c.usuario1_id = ? THEN u2.telefono
+          ELSE u1.telefono
+        END as other_user_phone,
+        CASE 
+          WHEN c.usuario1_id = ? THEN u2.foto_perfil
+          ELSE u1.foto_perfil
+        END as other_user_avatar,
+        COALESCE(
+          CASE WHEN c.usuario1_id = ? THEN c2.apodo ELSE c3.apodo END,
+          CASE WHEN c.usuario1_id = ? THEN u2.nombre ELSE u1.nombre END
+        ) as other_user_apodo,
+        'private' as type,
+        (SELECT contenido FROM mensajes 
+         WHERE conversacion_id = c.id 
+         AND eliminado = 0
+         ORDER BY created_at DESC LIMIT 1) as last_message,
+        (SELECT created_at FROM mensajes 
+         WHERE conversacion_id = c.id 
+         AND eliminado = 0
+         ORDER BY created_at DESC LIMIT 1) as last_message_time,
+        CASE WHEN c2.id IS NOT NULL OR c3.id IS NOT NULL THEN true ELSE false END as is_contact,
+        COALESCE(
+          CASE WHEN c.usuario1_id = ? THEN c2.archivado ELSE c3.archivado END,
+          0
+        ) as archivado,
+        COALESCE(
+          CASE WHEN c.usuario1_id = ? THEN c2.fijado ELSE c3.fijado END,
+          0
+        ) as fijado,
+        NULL as group_id,
+        NULL as group_name,
+        NULL as group_avatar,
+        NULL as member_count
+      FROM conversaciones c
+      JOIN usuarios u1 ON c.usuario1_id = u1.id
+      JOIN usuarios u2 ON c.usuario2_id = u2.id
+      LEFT JOIN contactos c2 ON c2.contacto_id = u2.id AND c2.usuario_id = ?
+      LEFT JOIN contactos c3 ON c3.contacto_id = u1.id AND c3.usuario_id = ?
+      WHERE c.tipo = 'privada'
+        AND (c.usuario1_id = ? OR c.usuario2_id = ?)
+        AND COALESCE(
+          CASE WHEN c.usuario1_id = ? THEN c2.archivado ELSE c3.archivado END,
+          0
+        ) = 0
       ORDER BY 
-        fijado DESC,
+        COALESCE(
+          CASE WHEN c.usuario1_id = ? THEN c2.fijado ELSE c3.fijado END,
+          0
+        ) DESC,
         last_message_time DESC,
-        created_at DESC
+        c.created_at DESC
     `;
 
-    // Parámetros en orden exacto de aparición en la consulta
-    const params = [
-      // 1-4: para CASE en privados (other_user_id, other_user_name, other_user_phone, other_user_avatar)
-      userId, userId, userId, userId,
-      // 5-6: para COALESCE apodo (primer CASE y segundo CASE)
-      userId, userId,
-      // 7-8: para archivado y fijado en privados
-      userId, userId,
-      // 9-10: para LEFT JOIN contactos c2 y c3
-      userId, userId,
-      // 11-12: para WHERE usuario1_id / usuario2_id en privados
-      userId, userId,
-      // 13: para WHERE archivado = 0
-      userId,
-      // 14: para JOIN grupo_miembros en la parte de grupos
-      userId
+    const privateParams = [
+      userId, userId, userId, userId, // other_user_*
+      userId, userId,                 // apodo
+      userId, userId,                 // archivado, fijado
+      userId, userId,                 // c2.usuario_id, c3.usuario_id
+      userId, userId,                 // WHERE usuario1_id/usuario2_id
+      userId,                         // WHERE archivado = 0
+      userId                          // ORDER BY fijado
     ];
 
-    console.log('SQL params count:', params.length);
+    // --- 2. Consulta para grupos (solo donde el usuario es miembro) ---
+    const groupSql = `
+      SELECT 
+        c.id,
+        'grupo' as tipo,
+        c.created_at,
+        NULL as other_user_id,
+        NULL as other_user_name,
+        NULL as other_user_phone,
+        NULL as other_user_avatar,
+        NULL as other_user_apodo,
+        'group' as type,
+        (SELECT contenido FROM mensajes 
+         WHERE conversacion_id = c.id 
+         AND eliminado = 0
+         ORDER BY created_at DESC LIMIT 1) as last_message,
+        (SELECT created_at FROM mensajes 
+         WHERE conversacion_id = c.id 
+         AND eliminado = 0
+         ORDER BY created_at DESC LIMIT 1) as last_message_time,
+        false as is_contact,
+        0 as archivado,
+        0 as fijado,
+        g.id as group_id,
+        g.nombre as group_name,
+        g.imagen as group_avatar,
+        (SELECT COUNT(*) FROM grupo_miembros WHERE grupo_id = g.id) as member_count
+      FROM conversaciones c
+      JOIN grupos g ON c.grupo_id = g.id
+      JOIN grupo_miembros gm ON gm.grupo_id = g.id AND gm.usuario_id = ?
+      WHERE c.tipo = 'grupo'
+      ORDER BY last_message_time DESC, c.created_at DESC
+    `;
 
-    const [rows] = await pool.execute(sql, params);
+    const groupParams = [userId];
 
-    console.log(`📊 Found ${rows.length} conversations (private + groups)`);
-    res.json(rows);
+    // Ejecutar ambas consultas en paralelo
+    const [privateRows] = await pool.execute(privateSql, privateParams);
+    const [groupRows] = await pool.execute(groupSql, groupParams);
+
+    // Combinar y ordenar (los privados ya vienen ordenados, los grupos también; podemos intercalar según fecha)
+    const allConversations = [...privateRows, ...groupRows].sort((a, b) => {
+      // Primero por fijado (solo privados tienen fijado)
+      if (a.fijado && !b.fijado) return -1;
+      if (!a.fijado && b.fijado) return 1;
+      
+      // Luego por fecha del último mensaje (descendente)
+      const dateA = a.last_message_time ? new Date(a.last_message_time) : new Date(a.created_at);
+      const dateB = b.last_message_time ? new Date(b.last_message_time) : new Date(b.created_at);
+      return dateB - dateA;
+    });
+
+    console.log(`📊 Found ${privateRows.length} private + ${groupRows.length} groups = ${allConversations.length} total`);
+    res.json(allConversations);
   } catch (error) {
     console.error('❌ Error fetching conversations:', error);
     res.status(500).json({ error: 'Error al cargar conversaciones' });
