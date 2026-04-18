@@ -6,7 +6,7 @@ exports.getConversations = async (req, res) => {
     const userId = req.user.id;
     console.log('📥 Fetching conversations for user:', userId);
 
-    // --- Chats privados (sin cambios) ---
+    // --- Chats privados con contador de no leídos ---
     const [privateChats] = await pool.execute(
       `SELECT 
         c.id,
@@ -29,7 +29,15 @@ exports.getConversations = async (req, res) => {
         NULL AS group_id,
         NULL AS group_name,
         NULL AS group_avatar,
-        NULL AS member_count
+        NULL AS member_count,
+        (SELECT COUNT(*)
+         FROM mensajes m
+         LEFT JOIN mensajes_estado_privada mep ON mep.mensaje_id = m.id AND mep.usuario_id = ?
+         WHERE m.conversacion_id = c.id
+           AND m.emisor_id != ?
+           AND m.eliminado = 0
+           AND (mep.estado IS NULL OR mep.estado != 'read')
+        ) AS unread_count
       FROM conversaciones c
       JOIN usuarios u1 ON c.usuario1_id = u1.id
       JOIN usuarios u2 ON c.usuario2_id = u2.id
@@ -44,6 +52,7 @@ exports.getConversations = async (req, res) => {
       [
         userId, userId, userId, userId, userId, userId, // other_user y apodo
         userId, userId,                                   // archivado, fijado
+        userId, userId,                                   // parámetros para unread_count
         userId, userId,                                   // c2, c3
         userId, userId,                                   // WHERE usuario1/2
         userId,                                           // archivado = 0
@@ -51,7 +60,7 @@ exports.getConversations = async (req, res) => {
       ]
     );
 
-    // --- Grupos (CORREGIDO - solo los que pertenece el usuario) ---
+    // --- Grupos con contador de no leídos ---
     const [groupChats] = await pool.execute(
       `SELECT 
         c.id,
@@ -71,13 +80,21 @@ exports.getConversations = async (req, res) => {
         g.id AS group_id,
         g.nombre AS group_name,
         g.imagen AS group_avatar,
-        (SELECT COUNT(*) FROM grupo_miembros WHERE grupo_id = g.id) AS member_count
+        (SELECT COUNT(*) FROM grupo_miembros WHERE grupo_id = g.id) AS member_count,
+        (SELECT COUNT(*)
+         FROM mensajes m
+         LEFT JOIN mensajes_estado_grupo meg ON meg.mensaje_id = m.id AND meg.usuario_id = ?
+         WHERE m.conversacion_id = c.id
+           AND m.emisor_id != ?
+           AND m.eliminado = 0
+           AND (meg.estado IS NULL OR meg.estado != 'read')
+        ) AS unread_count
       FROM conversaciones c
       JOIN grupos g ON c.grupo_id = g.id
       WHERE c.tipo = 'grupo' 
         AND g.id IN (SELECT grupo_id FROM grupo_miembros WHERE usuario_id = ?)
       ORDER BY last_message_time DESC`,
-      [userId]
+      [userId, userId, userId]  // unread_count (userId para estado, userId para emisor), y membresía
     );
 
     // Combinar y ordenar
