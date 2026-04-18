@@ -6,7 +6,7 @@ exports.getConversations = async (req, res) => {
     const userId = req.user.id;
     console.log('📥 Fetching conversations for user:', userId);
 
-    // --- Chats privados ---
+    // --- Chats privados (sin cambios) ---
     const [privateChats] = await pool.execute(
       `SELECT 
         c.id,
@@ -51,7 +51,7 @@ exports.getConversations = async (req, res) => {
       ]
     );
 
-    // --- Grupos (solo donde el usuario es miembro) ---
+    // --- Grupos (CORREGIDO - solo los que pertenece el usuario) ---
     const [groupChats] = await pool.execute(
       `SELECT 
         c.id,
@@ -74,13 +74,13 @@ exports.getConversations = async (req, res) => {
         (SELECT COUNT(*) FROM grupo_miembros WHERE grupo_id = g.id) AS member_count
       FROM conversaciones c
       JOIN grupos g ON c.grupo_id = g.id
-      JOIN grupo_miembros gm ON gm.grupo_id = g.id AND gm.usuario_id = ?
-      WHERE c.tipo = 'grupo'
+      WHERE c.tipo = 'grupo' 
+        AND g.id IN (SELECT grupo_id FROM grupo_miembros WHERE usuario_id = ?)
       ORDER BY last_message_time DESC`,
       [userId]
     );
 
-    // Combinar y ordenar (fijados primero)
+    // Combinar y ordenar
     const all = [...privateChats, ...groupChats].sort((a, b) => {
       if (a.fijado && !b.fijado) return -1;
       if (!a.fijado && b.fijado) return 1;
