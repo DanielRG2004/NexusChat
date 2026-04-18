@@ -70,6 +70,10 @@ app.use(express.urlencoded({ extended: true }));
 // =========================
 // ARCHIVOS ESTÁTICOS
 // =========================
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // =========================

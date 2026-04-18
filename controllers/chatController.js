@@ -6,9 +6,9 @@ exports.getConversations = async (req, res) => {
     const userId = req.user.id;
     console.log('📥 Fetching conversations for user:', userId);
 
-    // Consulta unificada: chats privados + grupos
-    const [rows] = await pool.execute(
-      `SELECT * FROM (
+    // Consulta unificada: chats privados + grupos (solo los que pertenece el usuario)
+    const sql = `
+      SELECT * FROM (
         -- Chats privados
         SELECT 
           c.id,
@@ -70,7 +70,7 @@ exports.getConversations = async (req, res) => {
 
         UNION ALL
 
-        -- Grupos
+        -- Grupos (solo donde el usuario es miembro)
         SELECT 
           c.id,
           'grupo' as tipo,
@@ -104,15 +104,30 @@ exports.getConversations = async (req, res) => {
       ORDER BY 
         fijado DESC,
         last_message_time DESC,
-        created_at DESC`,
-      [
-        // Parámetros para la parte privada (16 placeholders)
-        userId, userId, userId, userId, userId, userId, userId, userId,
-        userId, userId, userId, userId, userId,
-        // Parámetro extra para la parte de grupos (1 placeholder)
-        userId
-      ]
-    );
+        created_at DESC
+    `;
+
+    // Parámetros en orden exacto de aparición en la consulta
+    const params = [
+      // 1-4: para CASE en privados (other_user_id, other_user_name, other_user_phone, other_user_avatar)
+      userId, userId, userId, userId,
+      // 5-6: para COALESCE apodo (primer CASE y segundo CASE)
+      userId, userId,
+      // 7-8: para archivado y fijado en privados
+      userId, userId,
+      // 9-10: para LEFT JOIN contactos c2 y c3
+      userId, userId,
+      // 11-12: para WHERE usuario1_id / usuario2_id en privados
+      userId, userId,
+      // 13: para WHERE archivado = 0
+      userId,
+      // 14: para JOIN grupo_miembros en la parte de grupos
+      userId
+    ];
+
+    console.log('SQL params count:', params.length);
+
+    const [rows] = await pool.execute(sql, params);
 
     console.log(`📊 Found ${rows.length} conversations (private + groups)`);
     res.json(rows);
