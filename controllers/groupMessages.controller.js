@@ -115,25 +115,16 @@ async function sendGroupMessage(req, res, next) {
     } = req.body;
 
     if (!groupId) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Grupo invalido'
-      });
+      return res.status(400).json({ ok: false, message: 'Grupo invalido' });
     }
 
     const membership = await getMembership(conn, groupId, req.user.id);
     if (!membership) {
-      return res.status(403).json({
-        ok: false,
-        message: 'No eres miembro de este grupo'
-      });
+      return res.status(403).json({ ok: false, message: 'No eres miembro de este grupo' });
     }
 
     if (membership.solo_admins && membership.rol !== 'admin') {
-      return res.status(403).json({
-        ok: false,
-        message: 'Solo los administradores pueden enviar mensajes en este grupo'
-      });
+      return res.status(403).json({ ok: false, message: 'Solo los administradores pueden enviar mensajes en este grupo' });
     }
 
     const plainText = String(contenido || '').trim();
@@ -141,10 +132,7 @@ async function sendGroupMessage(req, res, next) {
     const encrypted = Number(es_cifrado) === 1 || cipherText.length > 0;
 
     if (!plainText && !cipherText) {
-      return res.status(400).json({
-        ok: false,
-        message: 'El mensaje no puede estar vacio'
-      });
+      return res.status(400).json({ ok: false, message: 'El mensaje no puede estar vacio' });
     }
 
     await conn.beginTransaction();
@@ -154,9 +142,7 @@ async function sendGroupMessage(req, res, next) {
       [groupId]
     );
 
-    const conversacionId = conversationRows[0][0]
-      ? conversationRows[0][0].id
-      : await ensureGroupConversation(conn, groupId);
+    const conversacionId = conversationRows[0][0]?.id || await ensureGroupConversation(conn, groupId);
 
     const contenidoFinal = encrypted ? null : plainText;
     const contenidoCifradoFinal = encrypted ? (cipherText || plainText) : null;
@@ -165,18 +151,32 @@ async function sendGroupMessage(req, res, next) {
       `INSERT INTO mensajes
        (conversacion_id, emisor_id, contenido, contenido_cifrado, algoritmo_cifrado, es_cifrado, tipo, estado)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'sent')`,
-      [
-        conversacionId,
-        req.user.id,
-        contenidoFinal,
-        contenidoCifradoFinal,
-        encrypted ? algoritmo_cifrado : null,
-        encrypted ? 1 : 0,
-        tipo
-      ]
+      [conversacionId, req.user.id, contenidoFinal, contenidoCifradoFinal, encrypted ? algoritmo_cifrado : null, encrypted ? 1 : 0, tipo]
     );
 
     const mensajeId = messageResult.insertId;
+
+    // --- NUEVO: Guardar en archivos_multimedia si es multimedia ---
+    if (tipo !== 'texto') {
+      const { mediaUrl, thumbnailUrl, duration, mimetype, size, originalName } = req.body;
+      const filename = require('path').basename(mediaUrl || '');
+      await conn.query(
+        `INSERT INTO archivos_multimedia 
+         (mensaje_id, usuario_id, nombre_original, nombre_archivo, url, tipo_mime, tipo, tamanio, duracion, thumbnail_url, estado)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'listo')`,
+        [
+          mensajeId, req.user.id,
+          originalName || filename,
+          filename,
+          mediaUrl,
+          mimetype || 'application/octet-stream',
+          tipo,
+          size || 0,
+          duration || null,
+          thumbnailUrl || null
+        ]
+      );
+    }
 
     const [members] = await conn.query(
       'SELECT usuario_id FROM grupo_miembros WHERE grupo_id = ?',
@@ -184,17 +184,8 @@ async function sendGroupMessage(req, res, next) {
     );
 
     if (members.length > 0) {
-      const values = members.map((m) => [
-        mensajeId,
-        m.usuario_id,
-        m.usuario_id === req.user.id ? 'read' : 'sent'
-      ]);
-
-      await conn.query(
-        `INSERT INTO mensajes_estado_grupo (mensaje_id, usuario_id, estado)
-         VALUES ?`,
-        [values]
-      );
+      const values = members.map(m => [mensajeId, m.usuario_id, m.usuario_id === req.user.id ? 'read' : 'sent']);
+      await conn.query(`INSERT INTO mensajes_estado_grupo (mensaje_id, usuario_id, estado) VALUES ?`, [values]);
     }
 
     await conn.commit();
@@ -202,15 +193,7 @@ async function sendGroupMessage(req, res, next) {
     return res.status(201).json({
       ok: true,
       message: 'Mensaje enviado correctamente',
-      data: {
-        id: mensajeId,
-        conversacion_id: conversacionId,
-        contenido: contenidoFinal,
-        contenido_cifrado: contenidoCifradoFinal,
-        algoritmo_cifrado: encrypted ? algoritmo_cifrado : null,
-        es_cifrado: encrypted ? 1 : 0,
-        tipo
-      }
+      data: { id: mensajeId, conversacion_id: conversacionId, contenido: contenidoFinal, contenido_cifrado: contenidoCifradoFinal, algoritmo_cifrado: encrypted ? algoritmo_cifrado : null, es_cifrado: encrypted ? 1 : 0, tipo }
     });
   } catch (error) {
     await conn.rollback();

@@ -77,34 +77,48 @@ exports.sendMessage = async (req, res) => {
   try {
     const { conversationId, content, type = 'texto' } = req.body;
     const userId = req.user.id;
-    
-    // Insertar mensaje
+
     const [result] = await pool.execute(
       `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo, created_at) 
        VALUES (?, ?, ?, ?, NOW())`,
       [conversationId, userId, content, type]
     );
-    
     const messageId = result.insertId;
-    
-    // Obtener participantes
+
     const [conv] = await pool.execute(
       `SELECT usuario1_id, usuario2_id FROM conversaciones WHERE id = ?`,
       [conversationId]
     );
-    
-    const receiverId = conv[0].usuario1_id === userId 
-      ? conv[0].usuario2_id 
-      : conv[0].usuario1_id;
-    
-    // Crear estados
+    const receiverId = conv[0].usuario1_id === userId ? conv[0].usuario2_id : conv[0].usuario1_id;
+
     await pool.execute(
       `INSERT INTO mensajes_estado_privada (mensaje_id, usuario_id, estado) VALUES 
-       (?, ?, 'sent'),
-       (?, ?, 'sent')`,
+       (?, ?, 'sent'), (?, ?, 'sent')`,
       [messageId, userId, messageId, receiverId]
     );
-    
+
+    // Si es multimedia, guardar en archivos_multimedia
+    if (type !== 'texto') {
+      const { mediaUrl, thumbnailUrl, duration, mimetype, size, originalName } = req.body;
+      const filename = require('path').basename(mediaUrl || '');
+      await pool.execute(
+        `INSERT INTO archivos_multimedia 
+         (mensaje_id, usuario_id, nombre_original, nombre_archivo, url, tipo_mime, tipo, tamanio, duracion, thumbnail_url, estado)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'listo')`,
+        [
+          messageId, userId,
+          originalName || filename,
+          filename,
+          mediaUrl,
+          mimetype || 'application/octet-stream',
+          type,
+          size || 0,
+          duration || null,
+          thumbnailUrl || null
+        ]
+      );
+    }
+
     const [message] = await pool.execute(
       `SELECT m.*, u.nombre as sender_name 
        FROM mensajes m
@@ -112,9 +126,8 @@ exports.sendMessage = async (req, res) => {
        WHERE m.id = ?`,
       [messageId]
     );
-    
+
     res.status(201).json(message[0]);
-    
   } catch (error) {
     console.error('❌ Error sending message:', error);
     res.status(500).json({ error: 'Error al enviar mensaje' });
