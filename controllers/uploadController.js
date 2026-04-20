@@ -58,7 +58,7 @@ exports.uploadFile = async (req, res) => {
     else if (file.mimetype.startsWith('audio/')) fileType = 'audio';
 
     // Crear URL del archivo
-    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const fileUrl = `${baseUrl}/uploads/${file.filename}`;
 
     // Insertar mensaje con el tipo correcto

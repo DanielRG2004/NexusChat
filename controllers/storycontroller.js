@@ -14,7 +14,7 @@ if (!fs.existsSync(storiesDir)) {
 exports.getStories = async (req, res) => {
     try {
         const userId = req.user.id;
-        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
 
         const [stories] = await pool.execute(
             `SELECT s.*, u.nombre as user_name, u.foto_perfil as user_avatar,
@@ -58,7 +58,7 @@ AND s.activo = 1
 exports.getMyStory = async (req, res) => {
     try {
         const userId = req.user.id;
-        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
 
         const [story] = await pool.execute(
             `SELECT * FROM stories 
