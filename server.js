@@ -17,7 +17,6 @@ const authRoutes = require('./routes/authRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const contactRoutes = require('./routes/contactRoutes');
-const UploadRoutes = require('./routes/uploadRoutes');
 const storyRoutes = require('./routes/storyRoutes');
 
 
@@ -132,8 +131,6 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/groups', groupMessagesRoutes);
 
 app.use('/api/upload', uploadRoutes);
-
-app.use('/api/uploads', UploadRoutes);
 
 app.use('/api/stories', storyRoutes);
 

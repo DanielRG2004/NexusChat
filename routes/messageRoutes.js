@@ -11,10 +11,10 @@ router.get('/:conversationId', messageController.getMessages);
 // Enviar mensaje
 router.post('/', messageController.sendMessage);
 
-// Eliminar mensaje individual
-router.delete('/:messageId', messageController.deleteMessage);
-
 // Eliminar historial completo de conversación
 router.delete('/history/:conversationId', messageController.deleteChatHistory);
+
+// Eliminar mensaje individual
+router.delete('/:messageId', messageController.deleteMessage);
 
 module.exports = router;

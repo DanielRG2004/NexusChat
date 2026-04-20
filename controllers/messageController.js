@@ -22,7 +22,7 @@ exports.getMessages = async (req, res) => {
         am.url,
         am.nombre_original,
         am.tamanio,
-        am.tipo_mime
+        am.tipo_mime,
 
         CASE 
           WHEN m.emisor_id = ? THEN (

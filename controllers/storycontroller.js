@@ -83,7 +83,7 @@ exports.getMyStory = async (req, res) => {
 // ===============================
 exports.createStory = async (req, res) => {
     try {
-        const { tipo, contenido, color_fondo, url_media } = req.body;
+        const { tipo, contenido, color_fondo } = req.body;
         const userId = req.user.id;
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 24);
@@ -91,15 +91,27 @@ exports.createStory = async (req, res) => {
         let finalContenido = contenido;
         let finalUrlMedia = null;
 
-        // Si es imagen y viene en base64, guardarla como archivo
-        if (tipo === 'imagen' && url_media && url_media.startsWith('data:image')) {
-            const matches = url_media.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+        // 🔥 NUEVO: Si viene un archivo en req.file (subido con multer)
+        if (tipo === 'imagen' && req.file) {
+            // El archivo ya fue guardado por multer en uploads/messages/
+            // Solo necesitamos generar la URL
+            finalUrlMedia = `/uploads/messages/${req.file.filename}`;
+            finalContenido = null;
+        }
+        // Mantener soporte para base64 (por compatibilidad)
+        else if (tipo === 'imagen' && req.body.url_media && req.body.url_media.startsWith('data:image')) {
+            const matches = req.body.url_media.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
             if (matches && matches.length === 3) {
                 const extension = matches[1];
                 const imageData = matches[2];
                 const filename = `${Date.now()}-${userId}.${extension}`;
                 const filepath = path.join(storiesDir, filename);
-
+                
+                // Asegurar que la carpeta existe
+                if (!fs.existsSync(storiesDir)) {
+                    fs.mkdirSync(storiesDir, { recursive: true });
+                }
+                
                 fs.writeFileSync(filepath, Buffer.from(imageData, 'base64'));
                 finalUrlMedia = `/uploads/stories/${filename}`;
                 finalContenido = null;
@@ -108,7 +120,7 @@ exports.createStory = async (req, res) => {
 
         const [result] = await pool.execute(
             `INSERT INTO stories (usuario_id, tipo, contenido, url_media, color_fondo, expira_at, activo) 
-       VALUES (?, ?, ?, ?, ?, ?, 1)`,
+             VALUES (?, ?, ?, ?, ?, ?, 1)`,
             [userId, tipo, finalContenido, finalUrlMedia, color_fondo || '#075e54', expiresAt]
         );
 
