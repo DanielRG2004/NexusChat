@@ -140,74 +140,65 @@ exports.requestCode = async (req, res, next) => {
     const nombre = String(req.body.nombre || '').trim();
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
+    let telefono = req.body.telefono ? String(req.body.telefono).trim() : null;
 
+    // Validaciones previas (nombre, email, password) igual que antes...
     if (nombre.length < 3) {
-      return res.status(400).json({
-        ok: false,
-        message: 'El usuario debe tener al menos 3 caracteres'
-      });
+      return res.status(400).json({ ok: false, message: 'El usuario debe tener al menos 3 caracteres' });
     }
-
     if (!/^[a-zA-Z0-9_.-]{3,20}$/.test(nombre)) {
-      return res.status(400).json({
-        ok: false,
-        message: 'El usuario solo puede tener letras, numeros, punto, guion bajo o guion'
-      });
+      return res.status(400).json({ ok: false, message: 'El usuario solo puede tener letras, numeros, punto, guion bajo o guion' });
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Ingresa un correo valido'
-      });
+      return res.status(400).json({ ok: false, message: 'Ingresa un correo valido' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ ok: false, message: 'La contraseña debe tener al menos 6 caracteres' });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({
-        ok: false,
-        message: 'La contraseña debe tener al menos 6 caracteres'
-      });
+    // Validar y normalizar teléfono si se proporcionó
+    let normalizedPhone = null;
+    if (telefono) {
+      const { normalizeCRPhone } = require('../utils/phone');
+      normalizedPhone = normalizeCRPhone(telefono);
+      if (!normalizedPhone) {
+        return res.status(400).json({ ok: false, message: 'El teléfono debe tener 8 dígitos (formato costarricense)' });
+      }
+      // Verificar si el teléfono ya está en uso por otro usuario verificado
+      const [phoneExists] = await pool.query(
+        'SELECT id FROM usuarios WHERE telefono = ? AND estado_cuenta = "verificado" LIMIT 1',
+        [normalizedPhone]
+      );
+      if (phoneExists[0]) {
+        return res.status(409).json({ ok: false, message: 'Ese número de teléfono ya está registrado' });
+      }
     }
 
     const existing = await findUserByEmailOrName(email, nombre);
-
     if (existing && existing.estado_cuenta === 'verificado') {
-      return res.status(409).json({
-        ok: false,
-        message: 'Ese correo o usuario ya esta en uso'
-      });
+      return res.status(409).json({ ok: false, message: 'Ese correo o usuario ya esta en uso' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    let userId;
-    let user;
+    let userId, user;
 
     if (existing) {
       await pool.query(
         `UPDATE usuarios
-         SET nombre = ?,
-             email = ?,
-             telefono = NULL,
-             codigo_pais_id = NULL,
-             password = ?,
-             estado_cuenta = 'pendiente',
-             email_verificado_at = NULL
+         SET nombre = ?, email = ?, telefono = ?, codigo_pais_id = NULL, password = ?,
+             estado_cuenta = 'pendiente', email_verificado_at = NULL
          WHERE id = ?`,
-        [nombre, email, hashedPassword, existing.id]
+        [nombre, email, normalizedPhone, hashedPassword, existing.id]
       );
-
       userId = existing.id;
       user = await findUserById(userId);
     } else {
       const [result] = await pool.query(
         `INSERT INTO usuarios
           (nombre, telefono, codigo_pais_id, email, password, password_algo, foto_perfil, descripcion, estado_cuenta)
-         VALUES
-          (?, NULL, NULL, ?, ?, 'bcrypt', 'default.png', '', 'pendiente')`,
-        [nombre, email, hashedPassword]
+         VALUES (?, ?, NULL, ?, ?, 'bcrypt', 'default.png', '', 'pendiente')`,
+        [nombre, normalizedPhone, email, hashedPassword]
       );
-
       userId = result.insertId;
       user = await findUserById(userId);
     }
@@ -215,14 +206,9 @@ exports.requestCode = async (req, res, next) => {
     const verificationCode = generateVerificationCode(6);
     const verificationHash = hashVerificationCode(verificationCode);
     const expiraAt = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000);
-
     await createOrReplaceEmailVerification(userId, verificationHash, expiraAt);
 
-    await sendVerificationEmail({
-      to: email,
-      name: nombre,
-      code: verificationCode
-    });
+    await sendVerificationEmail({ to: email, name: nombre, code: verificationCode });
 
     return res.json({
       ok: true,
@@ -528,6 +514,22 @@ exports.updateProfile = async (req, res) => {
 
     const updates = [];
     const values = [];
+
+    // PERMITIR CAMBIAR EL NUMERO DE TELEFONO
+    if (telefono !== undefined) {
+      const { normalizeCRPhone } = require('../utils/phone');
+      const cleanPhone = String(telefono || '').trim();
+      if (cleanPhone) {
+        const normalized = normalizeCRPhone(cleanPhone);
+        if (!normalized) {
+          return res.status(400).json({ ok: false, message: 'Formato de teléfono inválido' });
+        }
+        updates.push('telefono = ?');
+        values.push(normalized);
+      } else {
+        updates.push('telefono = NULL');
+      }
+    }
 
     if (nombre !== undefined) {
       const cleanNombre = String(nombre || '').trim();
