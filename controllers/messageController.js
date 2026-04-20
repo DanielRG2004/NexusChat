@@ -19,6 +19,11 @@ exports.getMessages = async (req, res) => {
         u.nombre as sender_name,
         u.foto_perfil as sender_avatar,
 
+        am.url,
+        am.nombre_original,
+        am.tamanio,
+        am.tipo_mime
+
         CASE 
           WHEN m.emisor_id = ? THEN (
             SELECT 
@@ -51,6 +56,7 @@ exports.getMessages = async (req, res) => {
       JOIN usuarios u ON m.emisor_id = u.id
       LEFT JOIN mensajes_estado_privada mep 
         ON m.id = mep.mensaje_id AND mep.usuario_id = ?
+      LEFT JOIN archivos_multimedia am ON m.id = am.mensaje_id
       WHERE m.conversacion_id = ?
         AND m.eliminado = 0
         AND NOT EXISTS (
@@ -120,9 +126,12 @@ exports.sendMessage = async (req, res) => {
     }
 
     const [message] = await pool.execute(
-      `SELECT m.*, u.nombre as sender_name 
+      `SELECT m.*, u.nombre as sender_name,
+              am.url AS fileUrl, am.nombre_original AS fileName,
+              am.tamanio AS fileSize, am.tipo_mime AS fileMime
        FROM mensajes m
        JOIN usuarios u ON m.emisor_id = u.id
+       LEFT JOIN archivos_multimedia am ON am.mensaje_id = m.id
        WHERE m.id = ?`,
       [messageId]
     );
