@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const storyController = require('../controllers/storyController');
+const storyController = require('../controllers/storycontroller');
 const authMiddleware = require('../middleware/auth');
 
 router.use(authMiddleware);
@@ -26,6 +26,7 @@ router.delete('/mute/:silenciado_id', storyController.unmuteUserStories);
 // Eliminar estado
 router.delete('/:storyId', storyController.deleteStory);
 
+// Obtener visualizaciones de un estado
 router.get('/:storyId/views', storyController.getStoryViews);
 
 module.exports = router;
