@@ -12,6 +12,7 @@ const CODE_TTL_MINUTES = Number(process.env.VERIFICATION_CODE_TTL_MINUTES || 10)
 const JWT_SECRET = process.env.JWT_SECRET || 'nexuschat_secret_key_2024';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d';
 
+// ========== CAMBIO: ADMIN_EMAILS en lugar de ADMIN_USERNAMES ==========
 const ADMIN_EMAILS = new Set(
   String(process.env.ADMIN_EMAILS || '')
     .split(',')
@@ -23,6 +24,7 @@ function isAdmin(email) {
   if (!email) return false;
   return ADMIN_EMAILS.has(email.toLowerCase());
 }
+// =======================================================================
 
 function toInt(value) {
   const n = Number(value);
@@ -365,11 +367,24 @@ exports.getMe = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   try {
-    const { nombre, descripcion, foto_perfil } = req.body;
+    const { nombre, descripcion, foto_perfil, telefono } = req.body;   // 👈 AÑADIDO telefono
     const userId = req.user.id;
 
     const updates = [];
     const values = [];
+
+    if (telefono !== undefined) {
+      const { normalizeCRPhone } = require('../utils/phone');
+      const cleanPhone = String(telefono || '').trim();
+      if (cleanPhone) {
+        const normalized = normalizeCRPhone(cleanPhone);
+        if (!normalized) return res.status(400).json({ ok: false, message: 'Formato de teléfono inválido' });
+        updates.push('telefono = ?');
+        values.push(normalized);
+      } else {
+        updates.push('telefono = NULL');
+      }
+    }
 
     if (nombre !== undefined) {
       const cleanNombre = String(nombre || '').trim();
