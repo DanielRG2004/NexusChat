@@ -12,15 +12,16 @@ const CODE_TTL_MINUTES = Number(process.env.VERIFICATION_CODE_TTL_MINUTES || 10)
 const JWT_SECRET = process.env.JWT_SECRET || 'nexuschat_secret_key_2024';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d';
 
-const ADMIN_USERNAMES = new Set(
-  String(process.env.ADMIN_USERNAMES || 'admin')
+const ADMIN_EMAILS = new Set(
+  String(process.env.ADMIN_EMAILS || '')
     .split(',')
-    .map((v) => v.trim().toLowerCase())
+    .map(e => e.trim().toLowerCase())
     .filter(Boolean)
 );
 
-function isAdminUsername(username) {
-  return ADMIN_USERNAMES.has(String(username || '').trim().toLowerCase());
+function isAdmin(email) {
+  if (!email) return false;
+  return ADMIN_EMAILS.has(email.toLowerCase());
 }
 
 function toInt(value) {
@@ -42,7 +43,6 @@ function sanitizeUser(user) {
 }
 
 function buildSessionToken(user) {
-  // Añadir esto al inicio de la función:
   const adminEmails = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(e => e.trim());
   const isAdmin = adminEmails.includes((user.email || '').toLowerCase());
 
@@ -50,10 +50,9 @@ function buildSessionToken(user) {
     {
       id: user.id,
       sub: user.id,
-      email: user.email,
+      telefono: user.telefono,
       nombre: user.nombre,
-      telefono: user.telefono || null,
-      isAdmin: isAdmin   // 👈 Usar la variable calculada
+      isAdmin: isAdmin
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -328,7 +327,7 @@ exports.login = async (req, res) => {
     }
 
     const token = buildSessionToken(user);
-    const isAdmin = isAdminUsername(user.email || user.nombre);
+    const isAdmin = isAdmin(user.email);   // 👈 CORREGIDO
 
     res.json({
       ok: true,
@@ -650,7 +649,7 @@ exports.completeRegistration = async (req, res, next) => {
 
     const updatedUser = updatedRows[0];
     const token = buildSessionToken(updatedUser);
-    const isAdmin = isAdminUsername(updatedUser.email || updatedUser.nombre);
+    const isAdmin = isAdmin(updatedUser.email);   // 👈 CORREGIDO
 
     return res.json({
       ok: true,
