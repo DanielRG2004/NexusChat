@@ -18,4 +18,7 @@ router.post('/complete-registration', authController.completeRegistration);
 router.get('/me', authMiddleware, authController.getMe);
 router.put('/me', authMiddleware, authController.updateProfile);
 
+router.put('/status', authController.updateStatus);
+router.get('/status', authController.getMyStatus);
+
 module.exports = router;

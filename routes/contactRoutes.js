@@ -23,4 +23,7 @@ router.get('/:usuario_id', contactController.getContacts);
 // Agregar un nuevo contacto
 router.post('/', contactController.addContact);
 
+// Obtener el perfil de un contacto
+router.get('/profile/:contacto_id', contactController.getContactProfile);
+
 module.exports = router;

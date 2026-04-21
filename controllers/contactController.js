@@ -285,3 +285,55 @@ exports.findUserByPhone = async (req, res) => {
     });
   }
 };
+
+// ============================================
+// OBTENER PERFIL DE UN CONTACTO
+// ============================================
+exports.getContactProfile = async (req, res) => {
+  try {
+    const { contacto_id } = req.params;
+    const userId = req.user.id;
+
+    // Verificar que sea contacto
+    const [isContact] = await pool.execute(
+      `SELECT id FROM contactos 
+       WHERE usuario_id = ? AND contacto_id = ? AND estado = 'aceptado'`,
+      [userId, contacto_id]
+    );
+
+    if (isContact.length === 0) {
+      return res.status(403).json({ error: 'No es tu contacto' });
+    }
+
+    // Obtener perfil del contacto
+    const [users] = await pool.execute(
+      `SELECT u.id, u.nombre, u.telefono, u.email, u.foto_perfil, u.descripcion,
+              eu.disponibilidad, eu.descripcion as estado_descripcion
+       FROM usuarios u
+       LEFT JOIN estado_usuario eu ON u.id = eu.usuario_id
+       WHERE u.id = ?`,
+      [contacto_id]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Obtener contacto (apodo, archivado, fijado)
+    const [contact] = await pool.execute(
+      `SELECT apodo, archivado, fijado FROM contactos 
+       WHERE usuario_id = ? AND contacto_id = ?`,
+      [userId, contacto_id]
+    );
+
+    res.json({
+      ...users[0],
+      apodo: contact[0]?.apodo || null,
+      archivado: contact[0]?.archivado || 0,
+      fijado: contact[0]?.fijado || 0
+    });
+  } catch (error) {
+    console.error('Error getting contact profile:', error);
+    res.status(500).json({ error: 'Error al cargar perfil' });
+  }
+};
