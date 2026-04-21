@@ -42,13 +42,18 @@ function sanitizeUser(user) {
 }
 
 function buildSessionToken(user) {
+  // Añadir esto al inicio de la función:
+  const adminEmails = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(e => e.trim());
+  const isAdmin = adminEmails.includes((user.email || '').toLowerCase());
+
   return jwt.sign(
     {
       id: user.id,
       sub: user.id,
-      telefono: user.telefono,
+      email: user.email,
       nombre: user.nombre,
-      isAdmin: isAdminUsername(user.email || user.nombre)
+      telefono: user.telefono || null,
+      isAdmin: isAdmin   // 👈 Usar la variable calculada
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
