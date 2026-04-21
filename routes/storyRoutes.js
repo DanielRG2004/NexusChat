@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const storyController = require('../controllers/storyController');
+const storyController = require('../controllers/storycontroller');
 const authMiddleware = require('../middleware/auth');
 const { uploadMessageMedia } = require('../middleware/upload.middleware');
 
