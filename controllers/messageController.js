@@ -18,32 +18,16 @@ exports.getMessages = async (req, res) => {
         m.created_at,
         u.nombre as sender_name,
         u.foto_perfil as sender_avatar,
-
         am.url,
         am.nombre_original,
         am.tamanio,
         am.tipo_mime,
-
         CASE 
           WHEN m.emisor_id = ? THEN (
             SELECT 
               CASE
-                WHEN MAX(
-                  CASE 
-                    WHEN estado = 'read' THEN 3
-                    WHEN estado = 'delivered' THEN 2
-                    WHEN estado = 'sent' THEN 1
-                  END
-                ) = 3 THEN 'read'
-                
-                WHEN MAX(
-                  CASE 
-                    WHEN estado = 'read' THEN 3
-                    WHEN estado = 'delivered' THEN 2
-                    WHEN estado = 'sent' THEN 1
-                  END
-                ) = 2 THEN 'delivered'
-                
+                WHEN MAX(CASE WHEN estado = 'read' THEN 3 WHEN estado = 'delivered' THEN 2 WHEN estado = 'sent' THEN 1 END) = 3 THEN 'read'
+                WHEN MAX(CASE WHEN estado = 'read' THEN 3 WHEN estado = 'delivered' THEN 2 WHEN estado = 'sent' THEN 1 END) = 2 THEN 'delivered'
                 ELSE 'sent'
               END
             FROM mensajes_estado_privada 
@@ -51,7 +35,6 @@ exports.getMessages = async (req, res) => {
           )
           ELSE mep.estado
         END as user_state
-
       FROM mensajes m
       JOIN usuarios u ON m.emisor_id = u.id
       LEFT JOIN mensajes_estado_privada mep 
@@ -59,19 +42,19 @@ exports.getMessages = async (req, res) => {
       LEFT JOIN archivos_multimedia am ON m.id = am.mensaje_id
       WHERE m.conversacion_id = ?
         AND m.eliminado = 0
-        AND NOT EXISTS (
-          SELECT 1 FROM mensajes_ocultos_usuario mou 
-          WHERE mou.mensaje_id = m.id AND mou.usuario_id = ?
-        )
       ORDER BY m.created_at ASC`,
-      [userId, userId, userId, conversationId, userId]
+      [userId, userId, userId, conversationId]
     );
     
     res.json(messages);
 
   } catch (error) {
-    console.error('❌ Error getting messages:', error);
-    res.status(500).json({ error: 'Error al cargar mensajes' });
+    console.error('❌ Error getting messages:', error.message);
+    console.error('❌ SQL:', error.sqlMessage);
+    res.status(500).json({ 
+      error: 'Error al cargar mensajes',
+      details: error.sqlMessage || error.message 
+    });
   }
 };
 
