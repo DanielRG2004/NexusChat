@@ -32,4 +32,7 @@ router.delete('/groups/:groupId', adminController.deleteGroup);
 router.get('/settings', adminController.getSettings);
 router.put('/settings', adminController.updateSettings);
 
+// Mensajes (moderación)
+router.get('/messages', adminController.getAllMessages);
+
 module.exports = router;

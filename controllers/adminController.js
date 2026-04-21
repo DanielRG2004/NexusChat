@@ -232,3 +232,40 @@ exports.updateSettings = async (req, res) => {
     conn.release();
   }
 };
+
+// ===============================
+// OBTENER TODOS LOS MENSAJES (MODERACIÓN)
+// ===============================
+exports.getAllMessages = async (req, res) => {
+  try {
+    const [messages] = await pool.query(
+      `SELECT 
+        m.id,
+        m.emisor_id as senderId,
+        u.nombre as senderName,
+        m.conversacion_id as chatId,
+        CASE 
+          WHEN c.tipo = 'privada' THEN 
+            (SELECT u2.nombre FROM usuarios u2 
+             WHERE u2.id = CASE WHEN c.usuario1_id = m.emisor_id THEN c.usuario2_id ELSE c.usuario1_id END)
+          ELSE g.nombre
+        END as chatName,
+        m.contenido as content,
+        m.tipo as type,
+        m.created_at as timestamp,
+        FALSE as flagged   -- Por ahora no hay reportes
+      FROM mensajes m
+      JOIN usuarios u ON m.emisor_id = u.id
+      JOIN conversaciones c ON m.conversacion_id = c.id
+      LEFT JOIN grupos g ON c.grupo_id = g.id
+      WHERE m.eliminado = 0
+      ORDER BY m.created_at DESC
+      LIMIT 200`
+    );
+
+    res.json({ ok: true, messages });
+  } catch (error) {
+    console.error('Error al obtener mensajes:', error);
+    res.status(500).json({ ok: false, message: 'Error al obtener mensajes' });
+  }
+};
