@@ -38,47 +38,9 @@ try {
   console.error('💥 ERROR cargando database:', err);
 }
 
-// ==========================
-// RUTAS
-// ==========================
-function safeRequire(routePath, name) {
-  try {
-    const r = require(routePath);
-    console.log(`🔵 Ruta OK: ${name}`);
-    return r;
-  } catch (err) {
-    console.error(`💥 ERROR en ruta ${name}:`, err.message);
-    return null;
-  }
-}
-
-const authRoutes = safeRequire('./routes/authRoutes', 'authRoutes');
-const chatRoutes = safeRequire('./routes/chatRoutes', 'chatRoutes');
-const messageRoutes = safeRequire('./routes/messageRoutes', 'messageRoutes');
-const contactRoutes = safeRequire('./routes/contactRoutes', 'contactRoutes');
-const storyRoutes = safeRequire('./routes/storyRoutes', 'storyRoutes');
-
-const emailAuthRoutes = safeRequire('./routes/emailAuth.routes', 'emailAuthRoutes');
-const groupRoutes = safeRequire('./routes/group.routes', 'groupRoutes');
-const uploadRoutes = safeRequire('./routes/upload.routes', 'uploadRoutes');
-const groupMessagesRoutes = safeRequire('./routes/groupMessages.routes', 'groupMessagesRoutes');
-
-// ADMIN
-const adminRoutes = require('./routes/adminRoutes');
-
-app.use('/api/admin', adminRoutes);
-
 // =========================
-// MIDDLEWARES
+// CREAR APP Y SERVIDOR (IMPORTANTE: ANTES DE USAR app)
 // =========================
-let errorHandler, notFound;
-try {
-  ({ errorHandler, notFound } = require('./middleware/error.middleware'));
-  console.log('🔵 Middlewares OK');
-} catch (err) {
-  console.error('💥 ERROR middlewares:', err);
-}
-
 const app = express();
 const server = http.createServer(app);
 
@@ -108,7 +70,7 @@ try {
 }
 
 // =========================
-// SEGURIDAD
+// SEGURIDAD Y MIDDLEWARES
 // =========================
 app.use(helmet());
 
@@ -123,7 +85,7 @@ app.use(express.urlencoded({ extended: true }));
 console.log('🔵 7 - Middlewares Express OK');
 
 // =========================
-// ARCHIVOS
+// ARCHIVOS ESTÁTICOS
 // =========================
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -142,8 +104,34 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK' });
 });
 
+// ==========================
+// CARGA DE RUTAS (segura)
+// ==========================
+function safeRequire(routePath, name) {
+  try {
+    const r = require(routePath);
+    console.log(`🔵 Ruta OK: ${name}`);
+    return r;
+  } catch (err) {
+    console.error(`💥 ERROR en ruta ${name}:`, err.message);
+    return null;
+  }
+}
+
+const authRoutes = safeRequire('./routes/authRoutes', 'authRoutes');
+const chatRoutes = safeRequire('./routes/chatRoutes', 'chatRoutes');
+const messageRoutes = safeRequire('./routes/messageRoutes', 'messageRoutes');
+const contactRoutes = safeRequire('./routes/contactRoutes', 'contactRoutes');
+const storyRoutes = safeRequire('./routes/storyRoutes', 'storyRoutes');
+
+const emailAuthRoutes = safeRequire('./routes/emailAuth.routes', 'emailAuthRoutes');
+const groupRoutes = safeRequire('./routes/group.routes', 'groupRoutes');
+const uploadRoutes = safeRequire('./routes/upload.routes', 'uploadRoutes');
+const groupMessagesRoutes = safeRequire('./routes/groupMessages.routes', 'groupMessagesRoutes');
+const adminRoutes = safeRequire('./routes/adminRoutes', 'adminRoutes');
+
 // =========================
-// USO DE RUTAS (seguro)
+// MONTAJE DE RUTAS
 // =========================
 if (authRoutes) app.use('/api/auth', authRoutes);
 if (emailAuthRoutes) app.use('/api/auth-email', emailAuthRoutes);
@@ -154,16 +142,24 @@ if (groupRoutes) app.use('/api/groups', groupRoutes);
 if (groupMessagesRoutes) app.use('/api/groups', groupMessagesRoutes);
 if (uploadRoutes) app.use('/api/upload', uploadRoutes);
 if (storyRoutes) app.use('/api/stories', storyRoutes);
+if (adminRoutes) app.use('/api/admin', adminRoutes);
+
+console.log('🔵 8 - Rutas montadas');
 
 // =========================
 // ERRORES
 // =========================
-if (notFound && errorHandler) {
-  app.use(notFound);
-  app.use(errorHandler);
+let errorHandler, notFound;
+try {
+  ({ errorHandler, notFound } = require('./middleware/error.middleware'));
+  if (notFound && errorHandler) {
+    app.use(notFound);
+    app.use(errorHandler);
+  }
+  console.log('🔵 Middlewares de error OK');
+} catch (err) {
+  console.error('💥 ERROR middlewares de error:', err);
 }
-
-console.log('🔵 8 - Rutas cargadas');
 
 // =========================
 // SOCKET HANDLER
