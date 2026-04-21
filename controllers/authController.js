@@ -677,3 +677,54 @@ exports.completeRegistration = async (req, res, next) => {
     next(error);
   }
 };
+// ============================================
+// ACTUALIZAR ESTADO DEL USUARIO
+// ============================================
+exports.updateStatus = async (req, res) => {
+  try {
+    const { disponibilidad, descripcion } = req.body;
+    const userId = req.user.id;
+
+    const validStatus = ['disponible', 'ocupado', 'ausente'];
+    if (disponibilidad && !validStatus.includes(disponibilidad)) {
+      return res.status(400).json({ error: 'Estado no válido' });
+    }
+
+    await pool.execute(
+      `INSERT INTO estado_usuario (usuario_id, disponibilidad, descripcion) 
+       VALUES (?, ?, ?) 
+       ON DUPLICATE KEY UPDATE disponibilidad = ?, descripcion = ?, updated_at = NOW()`,
+      [userId, disponibilidad || 'disponible', descripcion || 'Disponible', disponibilidad || 'disponible', descripcion || 'Disponible']
+    );
+
+    res.json({ message: 'Estado actualizado' });
+  } catch (error) {
+    console.error('Error updating status:', error);
+    res.status(500).json({ error: 'Error al actualizar estado' });
+  }
+};
+
+// ============================================
+// OBTENER MI ESTADO
+// ============================================
+exports.getMyStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const [status] = await pool.execute(
+      `SELECT disponibilidad, descripcion, updated_at 
+       FROM estado_usuario 
+       WHERE usuario_id = ?`,
+      [userId]
+    );
+
+    if (status.length === 0) {
+      return res.json({ disponibilidad: 'disponible', descripcion: 'Disponible' });
+    }
+
+    res.json(status[0]);
+  } catch (error) {
+    console.error('Error getting status:', error);
+    res.status(500).json({ error: 'Error al obtener estado' });
+  }
+};
