@@ -1,8 +1,4 @@
-// ============================================
-// ARCHIVO: controllers/uploadController.js
-// ============================================
 const pool = require('../config/database');
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
@@ -17,74 +13,28 @@ const messagesUploadDir = path.join(uploadRoot, 'messages');
   }
 });
 
-// ========== SUBIR IMAGEN DE GRUPO (CON GUARDADO EN BD) ==========
+// ========== SUBIR IMAGEN DE GRUPO (SIMPLE, SIN BD) ==========
 exports.uploadGroupImage = async (req, res) => {
-  let connection;
   try {
-    const { groupId } = req.body;  // ID del grupo
-    const userId = req.user.id;
     const file = req.file;
-
-    console.log('📤 Subiendo imagen de grupo:', { 
-      groupId, 
-      userId, 
-      filename: file?.originalname 
-    });
 
     if (!file) {
       return res.status(400).json({ ok: false, message: 'No se recibió ninguna imagen' });
     }
 
-    if (!groupId) {
-      return res.status(400).json({ ok: false, message: 'No se especificó el grupo' });
-    }
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const publicPath = `/uploads/groups/${file.filename}`;
+    const url = `${baseUrl}${publicPath}`;
 
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-
-    // Verificar que el usuario es miembro del grupo o admin
-    const [memberCheck] = await connection.execute(
-      `SELECT * FROM grupo_miembros WHERE grupo_id = ? AND usuario_id = ?`,
-      [groupId, userId]
-    );
-
-    if (memberCheck.length === 0) {
-      await connection.rollback();
-      return res.status(403).json({ ok: false, message: 'No eres miembro de este grupo' });
-    }
-
-    // Crear URL pública de la imagen
-    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-    const imageUrl = `${baseUrl}/uploads/groups/${file.filename}`;
-
-    // Actualizar la imagen del grupo en la BD
-    await connection.execute(
-      `UPDATE grupos SET imagen_url = ?, updated_at = NOW() WHERE id = ?`,
-      [imageUrl, groupId]
-    );
-
-    // Guardar registro del archivo multimedia
-    await connection.execute(
-      `INSERT INTO archivos_multimedia (mensaje_id, usuario_id, nombre_original, nombre_archivo, url, tipo_mime, tipo, tamanio) 
-       VALUES (NULL, ?, ?, ?, ?, ?, 'imagen', ?)`,
-      [userId, file.originalname, file.filename, imageUrl, file.mimetype, file.size]
-    );
-
-    await connection.commit();
-
-    return res.status(201).json({ 
-      ok: true, 
-      url: imageUrl, 
-      filename: file.filename,
-      message: 'Imagen de grupo actualizada correctamente'
+    return res.status(201).json({
+      ok: true,
+      message: 'Imagen subida correctamente',
+      url,
+      filename: file.filename
     });
-
   } catch (error) {
-    if (connection) await connection.rollback();
     console.error('❌ Error subiendo imagen de grupo:', error);
     return res.status(500).json({ ok: false, message: 'No se pudo subir la imagen' });
-  } finally {
-    if (connection) connection.release();
   }
 };
 
