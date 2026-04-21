@@ -1,4 +1,22 @@
+console.log('🔵 1 - Iniciando servidor...');
+
+// =========================
+// CAPTURA GLOBAL DE ERRORES
+// =========================
+process.on('uncaughtException', err => {
+  console.error('💥 UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', err => {
+  console.error('💥 UNHANDLED REJECTION:', err);
+});
+
+// =========================
+// IMPORTS
+// =========================
 const express = require('express');
+console.log('🔵 2 - express OK');
+
 const http = require('http');
 const socketIO = require('socket.io');
 const cors = require('cors');
@@ -7,34 +25,54 @@ const helmet = require('helmet');
 const path = require('path');
 
 dotenv.config();
-
-const pool = require('./config/database');
-
-// ==========================
-// RUTAS DEL COMPAÑERO
-// ==========================
-const authRoutes = require('./routes/authRoutes');
-const chatRoutes = require('./routes/chatRoutes');
-const messageRoutes = require('./routes/messageRoutes');
-const contactRoutes = require('./routes/contactRoutes');
-const storyRoutes = require('./routes/storyRoutes');
-
+console.log('🔵 3 - dotenv cargado');
 
 // =========================
-// TUS RUTAS
+// DATABASE
 // =========================
-const emailAuthRoutes = require('./routes/emailAuth.routes');
-const groupRoutes = require('./routes/group.routes');
-const uploadRoutes = require('./routes/upload.routes');
+let pool;
+try {
+  pool = require('./config/database');
+  console.log('🔵 4 - database OK');
+} catch (err) {
+  console.error('💥 ERROR cargando database:', err);
+}
 
-// Si ya creaste esta ruta separada para mensajes de grupo, descomenta estas 2 líneas.
-// Si todavía no existe el archivo, déjalo comentado para que no rompa Render.
-const groupMessagesRoutes = require('./routes/groupMessages.routes');
+// ==========================
+// RUTAS
+// ==========================
+function safeRequire(routePath, name) {
+  try {
+    const r = require(routePath);
+    console.log(`🔵 Ruta OK: ${name}`);
+    return r;
+  } catch (err) {
+    console.error(`💥 ERROR en ruta ${name}:`, err.message);
+    return null;
+  }
+}
+
+const authRoutes = safeRequire('./routes/authRoutes', 'authRoutes');
+const chatRoutes = safeRequire('./routes/chatRoutes', 'chatRoutes');
+const messageRoutes = safeRequire('./routes/messageRoutes', 'messageRoutes');
+const contactRoutes = safeRequire('./routes/contactRoutes', 'contactRoutes');
+const storyRoutes = safeRequire('./routes/storyRoutes', 'storyRoutes');
+
+const emailAuthRoutes = safeRequire('./routes/emailAuth.routes', 'emailAuthRoutes');
+const groupRoutes = safeRequire('./routes/group.routes', 'groupRoutes');
+const uploadRoutes = safeRequire('./routes/upload.routes', 'uploadRoutes');
+const groupMessagesRoutes = safeRequire('./routes/groupMessages.routes', 'groupMessagesRoutes');
 
 // =========================
 // MIDDLEWARES
 // =========================
-const { errorHandler, notFound } = require('./middleware/error.middleware');
+let errorHandler, notFound;
+try {
+  ({ errorHandler, notFound } = require('./middleware/error.middleware'));
+  console.log('🔵 Middlewares OK');
+} catch (err) {
+  console.error('💥 ERROR middlewares:', err);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -45,16 +83,24 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 10000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
+console.log('🔵 5 - Config OK');
+
 // =========================
 // SOCKET.IO
 // =========================
-const io = socketIO(server, {
-  cors: {
-    origin: CORS_ORIGIN,
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
+let io;
+try {
+  io = socketIO(server, {
+    cors: {
+      origin: CORS_ORIGIN,
+      methods: ['GET', 'POST'],
+      credentials: true
+    }
+  });
+  console.log('🔵 6 - Socket.IO OK');
+} catch (err) {
+  console.error('💥 ERROR socket.io:', err);
+}
 
 // =========================
 // SEGURIDAD
@@ -69,8 +115,10 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+console.log('🔵 7 - Middlewares Express OK');
+
 // =========================
-// ARCHIVOS ESTÁTICOS
+// ARCHIVOS
 // =========================
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -82,77 +130,56 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // RUTAS BASE
 // =========================
 app.get('/', (req, res) => {
-  res.json({
-    name: 'NexusChat API',
-    status: 'online'
-  });
-});
-
-app.get('/api', (req, res) => {
-  res.json({
-    endpoints: [
-      'POST /api/auth/request-code',
-      'POST /api/auth/verify-code',
-      'POST /api/auth/complete-registration',
-      'POST /api/auth/login',
-
-      'POST /api/auth-email/request-code',
-      'POST /api/auth-email/verify-code',
-      'POST /api/auth-email/complete-registration',
-      'POST /api/auth-email/login',
-
-      'GET /api/groups/mine',
-      'POST /api/groups',
-      'POST /api/upload/group-image',
-
-      'GET /api/chats',
-      'GET /api/messages/:id',
-      'GET /api/contacts'
-    ]
-  });
+  res.json({ name: 'NexusChat API', status: 'online' });
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ status: 'OK' });
 });
 
 // =========================
-// RUTAS
+// USO DE RUTAS (seguro)
 // =========================
-app.use('/api/auth', authRoutes);
-app.use('/api/auth-email', emailAuthRoutes);
-
-app.use('/api/chats', chatRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/contacts', contactRoutes);
-
-app.use('/api/groups', groupRoutes);
-
-app.use('/api/groups', groupMessagesRoutes);
-
-app.use('/api/upload', uploadRoutes);
-
-app.use('/api/stories', storyRoutes);
+if (authRoutes) app.use('/api/auth', authRoutes);
+if (emailAuthRoutes) app.use('/api/auth-email', emailAuthRoutes);
+if (chatRoutes) app.use('/api/chats', chatRoutes);
+if (messageRoutes) app.use('/api/messages', messageRoutes);
+if (contactRoutes) app.use('/api/contacts', contactRoutes);
+if (groupRoutes) app.use('/api/groups', groupRoutes);
+if (groupMessagesRoutes) app.use('/api/groups', groupMessagesRoutes);
+if (uploadRoutes) app.use('/api/upload', uploadRoutes);
+if (storyRoutes) app.use('/api/stories', storyRoutes);
 
 // =========================
 // ERRORES
 // =========================
-app.use(notFound);
-app.use(errorHandler);
+if (notFound && errorHandler) {
+  app.use(notFound);
+  app.use(errorHandler);
+}
+
+console.log('🔵 8 - Rutas cargadas');
 
 // =========================
-// SOCKETS
+// SOCKET HANDLER
 // =========================
-const socketHandler = require('./sockets/socketHandler');
-socketHandler(io, pool);
+try {
+  const socketHandler = require('./sockets/socketHandler');
+  socketHandler(io, pool);
+  console.log('🔵 9 - Socket handler OK');
+} catch (err) {
+  console.error('💥 ERROR socketHandler:', err);
+}
 
 // =========================
 // TEST DB
 // =========================
 (async () => {
   try {
-    await pool.execute('SELECT 1');
-    console.log('✅ MySQL conectado');
+    if (pool) {
+      await pool.execute('SELECT 1');
+      console.log('✅ MySQL conectado');
+    }
   } catch (error) {
     console.error('❌ Error DB:', error.message);
   }
@@ -162,16 +189,15 @@ socketHandler(io, pool);
 // START SERVER
 // =========================
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n✅ Server running on port ${PORT}`);
-  console.log(`🌐 CORS origin: ${CORS_ORIGIN}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
 // =========================
-// KEEP ALIVE DB
+// KEEP ALIVE
 // =========================
 setInterval(async () => {
   try {
-    await pool.execute('SELECT 1');
+    if (pool) await pool.execute('SELECT 1');
   } catch (error) {
     console.error('Keep-alive error:', error.message);
   }
