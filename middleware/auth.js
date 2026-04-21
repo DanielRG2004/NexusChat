@@ -25,6 +25,7 @@ function authMiddleware(req, res, next) {
       sub: decoded.sub || decoded.id,
       telefono: decoded.telefono || null,
       nombre: decoded.nombre || null,
+      email: decoded.email || null,
       isAdmin: decoded.isAdmin || false
     };
 

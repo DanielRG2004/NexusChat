@@ -63,6 +63,11 @@ const groupRoutes = safeRequire('./routes/group.routes', 'groupRoutes');
 const uploadRoutes = safeRequire('./routes/upload.routes', 'uploadRoutes');
 const groupMessagesRoutes = safeRequire('./routes/groupMessages.routes', 'groupMessagesRoutes');
 
+// ADMIN
+const adminRoutes = require('./routes/adminRoutes');
+
+app.use('/api/admin', adminRoutes);
+
 // =========================
 // MIDDLEWARES
 // =========================
